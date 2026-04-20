@@ -1,5 +1,34 @@
 # Changelog — Proyecto Finanzas Personales
 
+## [v0.11] — 2026-04-20 — Auth, Binance errors, Fintual API via cookie
+
+### ✅ Logrado
+- **Autenticación usuario+contraseña** en el dashboard
+  - Gate de login con `st.session_state` + `AUTH_USERNAME`/`AUTH_PASSWORD` en secrets
+  - Botón "Cerrar sesión" en sidebar
+- **Errores Binance visibles**: `get_portfolio()` devuelve `(portfolio, errors)` — dashboard muestra `st.warning` cuando un conector falla en vez de mostrar 0 silenciosamente
+- **Fintual via API REST directa** (sin Playwright en cloud):
+  - `GET /api/goals` con cookie de sesión `_fintual_session_cookie` funciona sin OTP
+  - `FintualAPIClient` en `connectors/fintual.py` — connector HTTP puro
+  - `aggregator.py` usa `FintualAPIClient` si `FINTUAL_SESSION_COOKIE` está en env/secrets
+  - `setup-fintual` ahora imprime la cookie para copiar a Streamlit Cloud
+  - Cloud ya puede obtener datos Fintual en vivo (no depende de cron en Mac)
+
+### 🔑 Secrets en Streamlit Cloud
+```toml
+AUTH_USERNAME = "benjaminapt"
+AUTH_PASSWORD = "tu_clave"
+FINTUAL_SESSION_COOKIE = "valor_de_setup-fintual"  # dura ~30 días
+```
+
+### Archivos modificados
+- `dashboard/app.py` — auth gate + logout + connector_errors display + banner actualizado
+- `services/aggregator.py` — get_portfolio() devuelve (Portfolio, errors_dict)
+- `connectors/fintual.py` — nueva clase FintualAPIClient
+- `cli/main.py` — setup-fintual imprime cookie; get_portfolio() desempacado con _
+
+---
+
 ## [v0.10] — 2026-04-20 — Deploy Streamlit Community Cloud + Supabase
 
 ### ✅ Logrado

@@ -78,7 +78,7 @@ db/
   portfolio.db        → datos (no committear)
 ```
 
-## Estado actual del proyecto (v0.10 — 2026-04-20)
+## Estado actual del proyecto (v0.11 — 2026-04-20)
 
 ### ✅ Funcionando
 - Fintual: scraping autenticado con Playwright (3 fondos + Reserva)
@@ -91,7 +91,9 @@ db/
 - **Modo cloud**: sin Playwright, rellena Fintual desde último snapshot de DB; Binance en vivo
 - **DB dual**: SQLite local (`DATABASE_URL` no definida) o PostgreSQL/Supabase (cloud)
 - **Deploy Streamlit Community Cloud**: `https://dcdymygparwpmzqlcykrvn.streamlit.app/`
-- **Cron Mac**: sync diario 8am → Fintual + Binance → Supabase
+- **Auth**: username+password via `AUTH_USERNAME`/`AUTH_PASSWORD` en secrets
+- **Fintual en cloud**: via `GET /api/goals` con `FINTUAL_SESSION_COOKIE` (sin Playwright)
+- **Cron Mac**: sync diario 8am → fallback si cookie expira
 
 ### ⚠️ Limitaciones conocidas
 - **Sesión Fintual expira ~30 días** → re-ejecutar `setup-fintual`
@@ -104,6 +106,13 @@ db/
 - **Secrets**: Streamlit Cloud expone via `st.secrets`, no `os.environ`. `dashboard/app.py` sincroniza al inicio con un loop `for k,v in st.secrets.items(): os.environ[k] = str(v)`
 - **Conexión DB**: usar **Transaction Pooler** (`aws-1-us-west-2.pooler.supabase.com:6543`), NO la conexión directa (`db.*.supabase.co:5432`) que usa IPv6 y Streamlit Cloud no puede alcanzar
 - **GitHub**: repo público `benjaminapt/finanzas-personales` (Streamlit Cloud requiere acceso público o cuenta Teams)
+
+### 🔑 Nota crítica — Fintual API via cookie de sesión
+- **`FINTUAL_SESSION_COOKIE`**: valor de `_fintual_session_cookie` del browser tras login en Fintual
+- **Cómo obtenerla**: ejecutar `python3 -m cli.main setup-fintual` en Mac → el comando imprime la cookie
+- **Duración**: ~30 días. Cuando expira, el dashboard muestra advertencia y cae al último snapshot
+- **Por qué no funciona el token REST**: `POST /api/access_tokens` devuelve token pero `GET /api/goals` retorna 401 (requiere 2FA verificado). La cookie de sesión del browser sí funciona.
+- **Secrets requeridos**: `AUTH_USERNAME`, `AUTH_PASSWORD`, `DATABASE_URL`, `BINANCE_API_KEY`, `BINANCE_API_SECRET`, `FINTUAL_SESSION_COOKIE`
 
 ### 🔑 Nota crítica — Flujos Binance (compras P2P en CLP)
 - **Las compras de ADA y BTC se hicieron via P2P pagando en CLP** (pesos chilenos)
