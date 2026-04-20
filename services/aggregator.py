@@ -3,7 +3,7 @@ from datetime import datetime
 import requests
 from dotenv import load_dotenv
 
-from connectors.fintual import FintualClient
+from connectors.fintual import FintualClient, FintualAPIClient
 from connectors.binance_client import BinanceClient
 from models.portfolio import Portfolio, Position
 
@@ -26,14 +26,22 @@ def _get_usdclp() -> float:
         return _FALLBACK_USDCLP
 
 
-def get_portfolio() -> Portfolio:
-    """Consolida posiciones de Fintual y Binance en un Portfolio unificado en USD."""
+def get_portfolio() -> tuple:
+    """
+    Consolida posiciones de Fintual y Binance en un Portfolio unificado en USD.
+    Retorna (Portfolio, errors_dict) donde errors_dict puede tener keys 'fintual' y/o 'binance'.
+    """
     positions: list[Position] = []
+    errors: dict = {}
     usdclp = _get_usdclp()
 
     # --- Fintual ---
     try:
-        fintual = FintualClient()
+        session_cookie = os.getenv("FINTUAL_SESSION_COOKIE")
+        if session_cookie:
+            fintual = FintualAPIClient(session_cookie)
+        else:
+            fintual = FintualClient()
         goals = fintual.get_goals()
         for goal in goals:
             attrs = goal.get("attributes", {})
@@ -50,6 +58,7 @@ def get_portfolio() -> Portfolio:
                 )
             )
     except Exception as e:
+        errors["fintual"] = str(e)
         print(f"[Fintual] Error al obtener datos: {e}")
 
     # --- Binance ---
@@ -76,6 +85,7 @@ def get_portfolio() -> Portfolio:
                 )
             )
     except Exception as e:
+        errors["binance"] = str(e)
         print(f"[Binance] Error al obtener datos: {e}")
 
     total_usd = sum(p.value_usd for p in positions)
@@ -83,4 +93,4 @@ def get_portfolio() -> Portfolio:
         timestamp=datetime.now(),
         positions=positions,
         total_usd=total_usd,
-    )
+    ), errors

@@ -20,7 +20,7 @@ def status():
     from services.aggregator import get_portfolio
 
     console.print("\n[bold cyan]Obteniendo portafolio...[/bold cyan]")
-    portfolio = get_portfolio()
+    portfolio, _ = get_portfolio()
 
     if not portfolio.positions:
         console.print("[red]No se encontraron posiciones. Verifica tu .env[/red]")
@@ -59,7 +59,7 @@ def sync():
     from services import cache
 
     console.print("\n[bold cyan]Sincronizando portafolio...[/bold cyan]")
-    portfolio = get_portfolio()
+    portfolio, _ = get_portfolio()
     cache.save_snapshot(portfolio)
     console.print(f"[green]✓ Snapshot guardado — Total: ${portfolio.total_usd:,.2f} USD[/green]\n")
 
@@ -72,7 +72,7 @@ def analyze():
     from services import cache
 
     console.print("\n[bold cyan]Analizando portafolio con IA...[/bold cyan]")
-    portfolio = get_portfolio()
+    portfolio, _ = get_portfolio()
 
     if not portfolio.positions:
         console.print("[red]No se encontraron posiciones. Verifica tu .env[/red]")
@@ -129,8 +129,22 @@ def history(days: int = typer.Option(30, help="Número de días a mostrar")):
 @app.command()
 def setup_fintual():
     """Abre el browser para que inicies sesión en Fintual (necesario la primera vez)."""
-    from connectors.fintual import setup_session
+    import json
+    from pathlib import Path
+    from connectors.fintual import setup_session, SESSION_PATH
     setup_session()
+    # Mostrar cookie de sesión para copiar a Streamlit Cloud secrets
+    try:
+        session = json.loads(SESSION_PATH.read_text())
+        cookies = {c["name"]: c["value"] for c in session.get("cookies", [])}
+        cookie = cookies.get("_fintual_session_cookie", "")
+        if cookie:
+            console.print("\n[bold yellow]─── Para Streamlit Cloud ─────────────────────────────────[/bold yellow]")
+            console.print("Agrega este secret en Streamlit Cloud → Settings → Secrets:")
+            console.print(f"\n[bold green]FINTUAL_SESSION_COOKIE = \"{cookie}\"[/bold green]\n")
+            console.print("[dim](Dura ~30 días; cuando expire, vuelve a ejecutar setup-fintual)[/dim]\n")
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

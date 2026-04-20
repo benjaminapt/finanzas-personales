@@ -191,3 +191,35 @@ def _extract_goals(page) -> list[dict]:
         print("[Fintual] ⚠️  No se pudieron extraer metas. Screenshot en /tmp/fintual_portfolio.png")
 
     return goals
+
+
+class FintualAPIClient:
+    """
+    Cliente HTTP directo para la API de Fintual usando cookie de sesión.
+    No requiere Playwright — compatible con Streamlit Cloud.
+
+    La cookie `_fintual_session_cookie` se obtiene corriendo `setup-fintual`
+    en Mac y copiando el valor al secret FINTUAL_SESSION_COOKIE en Streamlit Cloud.
+    Dura ~30 días; cuando expira hay que renovarla.
+    """
+
+    BASE = "https://fintual.cl/api"
+
+    def __init__(self, session_cookie: str):
+        self._cookie = session_cookie
+
+    def get_goals(self) -> list[dict]:
+        """Retorna metas en el mismo formato que FintualClient.get_goals()."""
+        import requests as _req
+        r = _req.get(
+            f"{self.BASE}/goals",
+            cookies={"_fintual_session_cookie": self._cookie},
+            timeout=10,
+        )
+        if r.status_code == 401:
+            raise RuntimeError(
+                "Cookie de sesión Fintual expirada.\n"
+                "Ejecuta setup-fintual en tu Mac y actualiza FINTUAL_SESSION_COOKIE en Streamlit Cloud."
+            )
+        r.raise_for_status()
+        return r.json().get("data", [])

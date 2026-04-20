@@ -14,6 +14,26 @@ try:
 except Exception:
     pass
 
+# ── Autenticación ────────────────────────────────────────────────────────────
+_AUTH_USER = os.environ.get("AUTH_USERNAME", "")
+_AUTH_PASS = os.environ.get("AUTH_PASSWORD", "")
+
+if _AUTH_USER and _AUTH_PASS:
+    if not st.session_state.get("authenticated"):
+        st.set_page_config(page_title="Finanzas Personales", page_icon="🏦")
+        st.markdown("## 🏦 Finanzas Personales")
+        with st.form("login_form"):
+            username = st.text_input("Usuario")
+            password = st.text_input("Contraseña", type="password")
+            submitted = st.form_submit_button("Ingresar", use_container_width=True)
+        if submitted:
+            if username == _AUTH_USER and password == _AUTH_PASS:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("Usuario o contraseña incorrectos")
+        st.stop()
+
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
@@ -50,7 +70,7 @@ def load_live_portfolio():
     from models.portfolio import Portfolio, Position
     from datetime import datetime
 
-    portfolio = get_portfolio()
+    portfolio, _errors = get_portfolio()
     fintual_cached_ts = None
 
     # Si no hay posiciones de Fintual, rellenar desde último snapshot
@@ -86,7 +106,7 @@ def load_live_portfolio():
             )
             fintual_cached_ts = last["timestamp"]
 
-    return portfolio, fintual_cached_ts
+    return portfolio, fintual_cached_ts, _errors
 
 
 def load_history(days=None):
@@ -151,15 +171,21 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
+    if _AUTH_USER and _AUTH_PASS:
+        if st.button("🚪 Cerrar sesión", use_container_width=True):
+            st.session_state.authenticated = False
+            st.rerun()
+
 
 # ── Carga de datos ───────────────────────────────────────────────────────────
 with st.spinner("Cargando portafolio..."):
     try:
-        portfolio, fintual_cached_ts = load_live_portfolio()
+        portfolio, fintual_cached_ts, connector_errors = load_live_portfolio()
         error = None
     except Exception as e:
         portfolio = None
         fintual_cached_ts = None
+        connector_errors = {}
         error = str(e)
 
 history = load_history(days=history_days)
@@ -177,11 +203,22 @@ if not portfolio or not portfolio.positions:
     st.warning("No se encontraron posiciones. Verifica tu `.env`.")
     st.stop()
 
+# Mostrar errores de conectores (no fatales)
+if connector_errors.get("binance"):
+    st.warning(f"⚠️ Binance no disponible: `{connector_errors['binance']}`")
+if connector_errors.get("fintual") and not fintual_cached_ts:
+    st.warning(f"⚠️ Fintual no disponible: `{connector_errors['fintual']}`")
+
 if fintual_cached_ts:
     from datetime import datetime as _dt
     ts_fmt = _dt.fromisoformat(fintual_cached_ts).strftime("%d/%m/%Y %H:%M")
-    st.info(f"Fintual: datos del último sync ({ts_fmt}). "
-            "Para actualizar, ejecuta `python3 -m cli.main sync` en tu Mac.")
+    cookie_configured = bool(os.environ.get("FINTUAL_SESSION_COOKIE"))
+    if cookie_configured:
+        st.warning(f"⚠️ Fintual: cookie de sesión expirada. Datos del último sync ({ts_fmt}). "
+                   "Ejecuta `setup-fintual` en tu Mac y actualiza el secret `FINTUAL_SESSION_COOKIE`.")
+    else:
+        st.info(f"Fintual: datos del último sync ({ts_fmt}). "
+                "Para datos en vivo, configura `FINTUAL_SESSION_COOKIE` en Streamlit Cloud secrets.")
 
 # Variación vs último snapshot
 variation_delta = None
