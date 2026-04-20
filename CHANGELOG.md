@@ -1,5 +1,29 @@
 # Changelog — Proyecto Finanzas Personales
 
+## [v0.10] — 2026-04-20 — Deploy Streamlit Community Cloud + Supabase
+
+### ✅ Logrado
+- **Deploy en Streamlit Community Cloud**: app pública en `https://dcdymygparwpmzqlcykrvn.streamlit.app/`
+- **Base de datos Supabase**: PostgreSQL cloud gratuita (proyecto `jxwaxheeyfgaszrftpjv`)
+  - Conexión via **Transaction Pooler** (`aws-1-us-west-2.pooler.supabase.com:6543`) para compatibilidad IPv4
+  - La conexión directa (`db.*.supabase.co:5432`) usa IPv6, no compatible con Streamlit Cloud
+- **Fix crítico**: `dashboard/app.py` ahora sincroniza `st.secrets` → `os.environ` al arrancar
+  - Streamlit Cloud expone secrets via `st.secrets`, no `os.environ`; `services/cache.py` usa `os.getenv("DATABASE_URL")`
+  - Sin este fix, `_DB_URL` quedaba en `None` y el app usaba SQLite vacío
+- **GitHub**: repo público `benjaminapt/finanzas-personales` con 3 commits
+- **Cron Mac**: sync diario a las 8am → `~/.finanzas/sync.log`
+  - Fintual requiere Playwright (no automatizable en cloud) → se sincroniza desde Mac
+  - Binance se consulta en vivo desde Streamlit Cloud
+- **`requirements.txt`**: versiones con `>=` (no `==`) para compatibilidad con Python 3.14
+- **`packages.txt`**: `libpq-dev` + `python3-dev` para compilar psycopg2 en cloud
+
+### Archivos modificados
+- `dashboard/app.py` — sync st.secrets → os.environ al inicio
+- `requirements.txt` — pins con `>=`
+- `packages.txt` — nuevo, dependencias del sistema para Supabase
+
+---
+
 ## [v0.9] — 2026-04-19 — Fix flujos Binance P2P en CLP
 
 ### ✅ Logrado

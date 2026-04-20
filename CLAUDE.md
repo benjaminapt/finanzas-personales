@@ -78,7 +78,7 @@ db/
   portfolio.db        → datos (no committear)
 ```
 
-## Estado actual del proyecto (v0.8 — 2026-04-19)
+## Estado actual del proyecto (v0.10 — 2026-04-20)
 
 ### ✅ Funcionando
 - Fintual: scraping autenticado con Playwright (3 fondos + Reserva)
@@ -90,12 +90,20 @@ db/
 - Análisis IA con Gemini (botón en dashboard)
 - **Modo cloud**: sin Playwright, rellena Fintual desde último snapshot de DB; Binance en vivo
 - **DB dual**: SQLite local (`DATABASE_URL` no definida) o PostgreSQL/Supabase (cloud)
+- **Deploy Streamlit Community Cloud**: `https://dcdymygparwpmzqlcykrvn.streamlit.app/`
+- **Cron Mac**: sync diario 8am → Fintual + Binance → Supabase
 
 ### ⚠️ Limitaciones conocidas
 - **Sesión Fintual expira ~30 días** → re-ejecutar `setup-fintual`
 - **Flujos Fintual**: dependen de lo que el SPA cargue en /app/movements; si Fintual cambia su API interna puede fallar
 - **API Fintual REST** (`/api/goals`): retorna 401 para cuentas normales → usamos Playwright
 - **Tipo de cambio USD/CLP**: de open.er-api.com, fallback a 950 si el servicio falla
+- **Streamlit Cloud**: no puede ejecutar Playwright → Fintual siempre sale del último snapshot; solo Binance es en vivo
+
+### 🔑 Nota crítica — Streamlit Cloud + Supabase
+- **Secrets**: Streamlit Cloud expone via `st.secrets`, no `os.environ`. `dashboard/app.py` sincroniza al inicio con un loop `for k,v in st.secrets.items(): os.environ[k] = str(v)`
+- **Conexión DB**: usar **Transaction Pooler** (`aws-1-us-west-2.pooler.supabase.com:6543`), NO la conexión directa (`db.*.supabase.co:5432`) que usa IPv6 y Streamlit Cloud no puede alcanzar
+- **GitHub**: repo público `benjaminapt/finanzas-personales` (Streamlit Cloud requiere acceso público o cuenta Teams)
 
 ### 🔑 Nota crítica — Flujos Binance (compras P2P en CLP)
 - **Las compras de ADA y BTC se hicieron via P2P pagando en CLP** (pesos chilenos)
