@@ -4,6 +4,16 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import streamlit as st
+
+# Streamlit Cloud expone secrets via st.secrets, no os.environ.
+# Sincronizamos para que los módulos que usan os.getenv() los reciban.
+try:
+    for _k, _v in st.secrets.items():
+        if _k not in os.environ:
+            os.environ[_k] = str(_v)
+except Exception:
+    pass
+
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
