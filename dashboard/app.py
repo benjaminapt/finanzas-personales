@@ -70,7 +70,11 @@ def load_live_portfolio():
     from models.portfolio import Portfolio, Position
     from datetime import datetime
 
-    portfolio, _errors = get_portfolio()
+    _result = get_portfolio()
+    if isinstance(_result, tuple):
+        portfolio, _errors = _result
+    else:
+        portfolio, _errors = _result, {}
     fintual_cached_ts = None
 
     # Si no hay posiciones de Fintual, rellenar desde último snapshot
