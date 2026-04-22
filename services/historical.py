@@ -161,5 +161,7 @@ def get_binance_price_history(symbol, days=365):
         return prices
 
     except Exception as e:
+        import traceback
         print(f"[Historical/Crypto] Error para '{symbol}': {e}")
+        traceback.print_exc()
         return []

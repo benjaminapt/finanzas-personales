@@ -30,18 +30,6 @@ def _get_conn():
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS idx_ts ON snapshots(timestamp)"
             )
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS binance_flows (
-                    id SERIAL PRIMARY KEY,
-                    asset TEXT NOT NULL,
-                    date TEXT NOT NULL,
-                    type TEXT NOT NULL,
-                    amount REAL NOT NULL,
-                    fiat_amount REAL,
-                    fiat TEXT,
-                    order_id TEXT UNIQUE
-                )
-            """)
         conn.commit()
         return conn
     else:
@@ -60,20 +48,44 @@ def _get_conn():
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_ts ON snapshots(timestamp)"
         )
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS binance_flows (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                asset TEXT NOT NULL,
-                date TEXT NOT NULL,
-                type TEXT NOT NULL,
-                amount REAL NOT NULL,
-                fiat_amount REAL,
-                fiat TEXT,
-                order_id TEXT UNIQUE
-            )
-        """)
         conn.commit()
         return conn
+
+
+def _ensure_flows_table(conn):
+    """Crea tabla binance_flows si no existe. Separada de _get_conn para no romper conexiones normales."""
+    try:
+        if _DB_URL:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS binance_flows (
+                        id SERIAL PRIMARY KEY,
+                        asset TEXT NOT NULL,
+                        date TEXT NOT NULL,
+                        type TEXT NOT NULL,
+                        amount REAL NOT NULL,
+                        fiat_amount REAL,
+                        fiat TEXT,
+                        order_id TEXT UNIQUE
+                    )
+                """)
+            conn.commit()
+        else:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS binance_flows (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    asset TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    fiat_amount REAL,
+                    fiat TEXT,
+                    order_id TEXT UNIQUE
+                )
+            """)
+            conn.commit()
+    except Exception:
+        pass
 
 
 def _fetchall(conn, sql, params=()):
@@ -185,6 +197,7 @@ def get_last_snapshot():
 def save_binance_flows(flows: list) -> int:
     """Guarda flujos Binance en DB. Usa order_id como clave única (upsert)."""
     conn = _get_conn()
+    _ensure_flows_table(conn)
     saved = 0
     try:
         for f in flows:
@@ -220,6 +233,7 @@ def save_binance_flows(flows: list) -> int:
 def get_binance_flows_cached(asset: str = None) -> list:
     """Lee flujos Binance de DB. Si asset es None, retorna todos."""
     conn = _get_conn()
+    _ensure_flows_table(conn)
     try:
         if asset:
             rows = _fetchall(
