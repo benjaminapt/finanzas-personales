@@ -8,7 +8,12 @@ import requests
 from datetime import datetime, date, timedelta
 
 FINTUAL_API = "https://fintual.cl/api"
-BINANCE_API = "https://api.binance.com/api/v3"
+COINGECKO_API = "https://api.coingecko.com/api/v3"
+_COINGECKO_IDS = {
+    "BTC": "bitcoin", "ADA": "cardano", "ETH": "ethereum",
+    "SOL": "solana", "DOT": "polkadot", "BNB": "binancecoin",
+    "XRP": "ripple", "DOGE": "dogecoin", "MATIC": "matic-network",
+}
 
 
 def _find_real_asset_id(goal_name):
@@ -118,41 +123,36 @@ def get_fintual_nav_history(goal_name, days=365):
 
 def get_binance_price_history(symbol, days=365):
     """
-    Retorna historial diario de precio en USD para un asset de Binance (API pública).
+    Retorna historial diario de precio en USD para un asset crypto via CoinGecko.
+    (CoinGecko es público, sin auth y sin geo-restricción — funciona desde cloud.)
 
     Retorna lista de dicts: {"date": "YYYY-MM-DD", "price": float, "pct": float}
     donde pct es el % de retorno acumulado respecto al primer día del período.
     """
     try:
-        import time as _time
-
-        end_ms = int(_time.time() * 1000)
-        start_ms = end_ms - (days * 24 * 60 * 60 * 1000)
+        cg_id = _COINGECKO_IDS.get(symbol.upper())
+        if not cg_id:
+            print(f"[Historical/Crypto] Symbol '{symbol}' no tiene mapeo CoinGecko")
+            return []
 
         resp = requests.get(
-            f"{BINANCE_API}/klines",
-            params={
-                "symbol": f"{symbol}USDT",
-                "interval": "1d",
-                "startTime": str(start_ms),
-                "endTime": str(end_ms),
-                "limit": "1000",
-            },
+            f"{COINGECKO_API}/coins/{cg_id}/market_chart",
+            params={"vs_currency": "usd", "days": str(days)},
             timeout=15,
         )
         resp.raise_for_status()
-        klines = resp.json()
+        raw_prices = resp.json().get("prices", [])  # [[timestamp_ms, price], ...]
 
-        if not klines:
+        if not raw_prices:
             return []
 
-        prices = [
-            {
-                "date": str(datetime.fromtimestamp(k[0] / 1000).date()),
-                "price": float(k[4]),  # precio de cierre
-            }
-            for k in klines
-        ]
+        # Agrupar por día (CoinGecko puede dar múltiples puntos por día)
+        daily = {}
+        for ts_ms, price in raw_prices:
+            d = str(datetime.fromtimestamp(ts_ms / 1000).date())
+            daily[d] = price  # último precio del día
+
+        prices = [{"date": d, "price": p} for d, p in sorted(daily.items())]
 
         first_price = prices[0]["price"] if prices else 1.0
         for p in prices:
@@ -161,5 +161,5 @@ def get_binance_price_history(symbol, days=365):
         return prices
 
     except Exception as e:
-        print(f"[Historical/Binance] Error para '{symbol}': {e}")
+        print(f"[Historical/Crypto] Error para '{symbol}': {e}")
         return []

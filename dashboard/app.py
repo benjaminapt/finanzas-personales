@@ -169,7 +169,11 @@ def load_fintual_flows(fund_name):
 @st.cache_data(ttl=3600)
 def load_binance_flows(asset):
     from services.flows import get_binance_flows
-    return get_binance_flows(asset=asset)
+    from services.cache import get_binance_flows_cached
+    flows = get_binance_flows(asset=asset)
+    if not flows:
+        flows = get_binance_flows_cached(asset=asset)
+    return flows
 
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────

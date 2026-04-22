@@ -61,7 +61,18 @@ def sync():
     console.print("\n[bold cyan]Sincronizando portafolio...[/bold cyan]")
     portfolio, _ = get_portfolio()
     cache.save_snapshot(portfolio)
-    console.print(f"[green]✓ Snapshot guardado — Total: ${portfolio.total_usd:,.2f} USD[/green]\n")
+    console.print(f"[green]✓ Snapshot guardado — Total: ${portfolio.total_usd:,.2f} USD[/green]")
+
+    # Guardar flujos Binance en DB (para que el cloud los lea)
+    try:
+        from services.flows import get_binance_flows
+        flows = get_binance_flows()
+        if flows:
+            saved = cache.save_binance_flows(flows)
+            console.print(f"[green]✓ {len(flows)} flujos Binance guardados en DB[/green]")
+    except Exception as e:
+        console.print(f"[yellow]⚠ Flujos Binance no guardados: {e}[/yellow]")
+    console.print()
 
 
 @app.command()

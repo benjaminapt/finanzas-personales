@@ -1,5 +1,31 @@
 # Changelog — Proyecto Finanzas Personales
 
+## [v0.12] — 2026-04-22 — Cloud: fallback DB Binance, CoinGecko, login persistente
+
+### ✅ Logrado
+- **Fix `cannot unpack non-iterable Portfolio object`**: unpacking defensivo en `load_live_portfolio()` para manejar tanto retorno simple como tupla de `get_portfolio()`
+- **Fallback Binance balances a DB**: cuando la API de Binance falla (geo-restricción desde cloud), el dashboard rellena desde el último snapshot de Supabase — igual que Fintual
+- **Login persistente**: el token de autenticación se guarda en `st.query_params` (URL). Al refrescar el browser, el usuario sigue logueado sin re-ingresar credenciales
+- **Historial de precios crypto → CoinGecko**: `get_binance_price_history()` ahora usa `api.coingecko.com` en vez de `api.binance.com/api/v3/klines`. CoinGecko es público, sin auth y sin geo-restricción — funciona desde cloud
+- **Flujos Binance P2P cacheados en DB**: nueva tabla `binance_flows` en Supabase. `sync` guarda los flujos P2P. El dashboard lee de DB cuando la API de Binance no está disponible
+- **Banner simplificado**: "Algunos datos provienen del último sync (fecha)" en vez de mensajes separados para cada plataforma
+
+### Causa raíz de los fallos en cloud
+`api.binance.com` está **completamente bloqueado** desde servidores EEUU (donde vive Streamlit Cloud). Esto incluye endpoints públicos y autenticados. La solución fue:
+- Balances → fallback a DB
+- Historial precios → CoinGecko (API alternativa pública)
+- Flujos P2P → cache en DB via `sync`
+
+### Archivos modificados
+- `dashboard/app.py` — fallback Binance, login persistente, banner simplificado, load_binance_flows con fallback DB
+- `services/historical.py` — CoinGecko en vez de Binance klines
+- `services/cache.py` — tabla `binance_flows` + `save_binance_flows()` + `get_binance_flows_cached()`
+- `cli/main.py` — sync guarda flujos Binance en DB
+- `CLAUDE.md` — v0.12, documentación geo-restricción Binance
+- `CHANGELOG.md` — esta entrada
+
+---
+
 ## [v0.11] — 2026-04-20 — Auth, Binance errors, Fintual API via cookie
 
 ### ✅ Logrado

@@ -30,6 +30,18 @@ def _get_conn():
             cur.execute(
                 "CREATE INDEX IF NOT EXISTS idx_ts ON snapshots(timestamp)"
             )
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS binance_flows (
+                    id SERIAL PRIMARY KEY,
+                    asset TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    fiat_amount REAL,
+                    fiat TEXT,
+                    order_id TEXT UNIQUE
+                )
+            """)
         conn.commit()
         return conn
     else:
@@ -48,6 +60,18 @@ def _get_conn():
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_ts ON snapshots(timestamp)"
         )
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS binance_flows (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                asset TEXT NOT NULL,
+                date TEXT NOT NULL,
+                type TEXT NOT NULL,
+                amount REAL NOT NULL,
+                fiat_amount REAL,
+                fiat TEXT,
+                order_id TEXT UNIQUE
+            )
+        """)
         conn.commit()
         return conn
 
@@ -154,3 +178,69 @@ def get_last_snapshot():
         "positions": json.loads(r[2]),
         "ai_recommendation": r[3],
     }
+
+
+# ── Binance Flows (cache para cloud) ─────────────────────────────────────────
+
+def save_binance_flows(flows: list) -> int:
+    """Guarda flujos Binance en DB. Usa order_id como clave única (upsert)."""
+    conn = _get_conn()
+    saved = 0
+    try:
+        for f in flows:
+            order_id = f.get("order_id") or f"{f.get('date','')}-{f.get('type','')}-{f.get('amount',0)}"
+            try:
+                if _DB_URL:
+                    _execute(
+                        conn,
+                        f"INSERT INTO binance_flows (asset, date, type, amount, fiat_amount, fiat, order_id) "
+                        f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH}) "
+                        f"ON CONFLICT (order_id) DO NOTHING",
+                        (f.get("asset", ""), f.get("date", ""), f.get("type", ""),
+                         float(f.get("amount", 0)), float(f.get("fiat_amount", 0) or 0),
+                         f.get("fiat", ""), order_id),
+                    )
+                else:
+                    _execute(
+                        conn,
+                        f"INSERT OR IGNORE INTO binance_flows (asset, date, type, amount, fiat_amount, fiat, order_id) "
+                        f"VALUES ({_PH},{_PH},{_PH},{_PH},{_PH},{_PH},{_PH})",
+                        (f.get("asset", ""), f.get("date", ""), f.get("type", ""),
+                         float(f.get("amount", 0)), float(f.get("fiat_amount", 0) or 0),
+                         f.get("fiat", ""), order_id),
+                    )
+                saved += 1
+            except Exception:
+                pass  # duplicado o error de inserción
+    finally:
+        conn.close()
+    return saved
+
+
+def get_binance_flows_cached(asset: str = None) -> list:
+    """Lee flujos Binance de DB. Si asset es None, retorna todos."""
+    conn = _get_conn()
+    try:
+        if asset:
+            rows = _fetchall(
+                conn,
+                f"SELECT asset, date, type, amount, fiat_amount, fiat "
+                f"FROM binance_flows WHERE asset = {_PH} ORDER BY date DESC",
+                (asset,),
+            )
+        else:
+            rows = _fetchall(
+                conn,
+                "SELECT asset, date, type, amount, fiat_amount, fiat "
+                "FROM binance_flows ORDER BY date DESC",
+            )
+    finally:
+        conn.close()
+
+    return [
+        {
+            "asset": r[0], "date": r[1], "type": r[2],
+            "amount": r[3], "fiat_amount": r[4], "fiat": r[5] or "",
+        }
+        for r in rows
+    ]
