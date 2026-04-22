@@ -1,5 +1,22 @@
 # Changelog — Proyecto Finanzas Personales
 
+## [v0.13] — 2026-04-22 — Flujos Fintual cacheados en DB + resilencia cloud
+
+### ✅ Logrado
+- **Flujos Fintual cacheados en DB**: nueva tabla `fintual_flows` en Supabase. `sync` guarda flujos de cada fondo Fintual. El cloud los lee de DB sin necesitar Playwright
+- **`load_fintual_flows` resiliente**: try/except + fallback a DB cache (mismo patrón que Binance)
+- **`load_binance_history` con logging**: si CoinGecko retorna vacío en cloud, ahora se loguea para diagnóstico
+- **`sync` sincroniza flujos Fintual**: además de Binance, ahora guarda flujos de cada fondo Fintual en Supabase
+
+### Archivos modificados
+- `services/cache.py` — tabla `fintual_flows` + `_ensure_fintual_flows_table()` + `save_fintual_flows()` + `get_fintual_flows_cached()`
+- `dashboard/app.py` — `load_fintual_flows` resiliente con DB fallback + logging en `load_binance_history`
+- `cli/main.py` — sync guarda flujos Fintual en DB
+- `CLAUDE.md` — v0.13, flujos Fintual cacheados
+- `CHANGELOG.md` — esta entrada
+
+---
+
 ## [v0.12] — 2026-04-22 — Cloud: fallback DB Binance, CoinGecko, login persistente
 
 ### ✅ Logrado

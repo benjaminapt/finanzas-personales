@@ -157,13 +157,27 @@ def load_fintual_history(fund_name, days):
 @st.cache_data(ttl=3600)
 def load_binance_history(symbol, days):
     from services.historical import get_binance_price_history
-    return get_binance_price_history(symbol, days=days)
+    result = get_binance_price_history(symbol, days=days)
+    if not result:
+        print(f"[Dashboard] CoinGecko retornó vacío para {symbol} ({days} días)")
+    return result
 
 
 @st.cache_data(ttl=3600)
 def load_fintual_flows(fund_name):
-    from services.flows import get_fintual_flows
-    return get_fintual_flows(fund_name)
+    flows = []
+    try:
+        from services.flows import get_fintual_flows
+        flows = get_fintual_flows(fund_name)
+    except Exception:
+        pass
+    if not flows:
+        try:
+            from services.cache import get_fintual_flows_cached
+            flows = get_fintual_flows_cached(fund_name)
+        except Exception:
+            pass
+    return flows
 
 
 @st.cache_data(ttl=3600)

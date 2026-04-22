@@ -72,6 +72,21 @@ def sync():
             console.print(f"[green]✓ {len(flows)} flujos Binance guardados en DB[/green]")
     except Exception as e:
         console.print(f"[yellow]⚠ Flujos Binance no guardados: {e}[/yellow]")
+
+    # Guardar flujos Fintual en DB (para que el cloud los lea sin Playwright)
+    try:
+        from services.flows import get_fintual_flows
+        fintual_names = [p.name for p in portfolio.positions if p.platform == "fintual"]
+        total_fintual = 0
+        for name in fintual_names:
+            fflows = get_fintual_flows(name)
+            if fflows:
+                cache.save_fintual_flows(name, fflows)
+                total_fintual += len(fflows)
+        if total_fintual:
+            console.print(f"[green]✓ {total_fintual} flujos Fintual guardados en DB[/green]")
+    except Exception as e:
+        console.print(f"[yellow]⚠ Flujos Fintual no guardados: {e}[/yellow]")
     console.print()
 
 

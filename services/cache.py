@@ -258,3 +258,97 @@ def get_binance_flows_cached(asset: str = None) -> list:
         }
         for r in rows
     ]
+
+
+# ── Fintual Flows (cache para cloud) ─────────────────────────────────────────
+
+def _ensure_fintual_flows_table(conn):
+    """Crea tabla fintual_flows si no existe."""
+    try:
+        if _DB_URL:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS fintual_flows (
+                        id SERIAL PRIMARY KEY,
+                        fund_name TEXT NOT NULL,
+                        date TEXT NOT NULL,
+                        type TEXT NOT NULL,
+                        amount_clp REAL NOT NULL,
+                        UNIQUE(fund_name, date, type, amount_clp)
+                    )
+                """)
+            conn.commit()
+        else:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS fintual_flows (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    fund_name TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    amount_clp REAL NOT NULL,
+                    UNIQUE(fund_name, date, type, amount_clp)
+                )
+            """)
+            conn.commit()
+    except Exception:
+        pass
+
+
+def save_fintual_flows(fund_name: str, flows: list) -> int:
+    """Guarda flujos Fintual en DB. Usa clave compuesta como unique."""
+    conn = _get_conn()
+    _ensure_fintual_flows_table(conn)
+    saved = 0
+    try:
+        for f in flows:
+            try:
+                if _DB_URL:
+                    _execute(
+                        conn,
+                        f"INSERT INTO fintual_flows (fund_name, date, type, amount_clp) "
+                        f"VALUES ({_PH},{_PH},{_PH},{_PH}) "
+                        f"ON CONFLICT (fund_name, date, type, amount_clp) DO NOTHING",
+                        (fund_name, f.get("date", ""), f.get("type", ""),
+                         float(f.get("amount_clp", 0))),
+                    )
+                else:
+                    _execute(
+                        conn,
+                        f"INSERT OR IGNORE INTO fintual_flows (fund_name, date, type, amount_clp) "
+                        f"VALUES ({_PH},{_PH},{_PH},{_PH})",
+                        (fund_name, f.get("date", ""), f.get("type", ""),
+                         float(f.get("amount_clp", 0))),
+                    )
+                saved += 1
+            except Exception:
+                pass
+    finally:
+        conn.close()
+    return saved
+
+
+def get_fintual_flows_cached(fund_name: str = None) -> list:
+    """Lee flujos Fintual de DB. Retorna formato compatible con get_fintual_flows."""
+    conn = _get_conn()
+    _ensure_fintual_flows_table(conn)
+    try:
+        if fund_name:
+            rows = _fetchall(
+                conn,
+                f"SELECT date, type, amount_clp "
+                f"FROM fintual_flows WHERE fund_name = {_PH} ORDER BY date DESC",
+                (fund_name,),
+            )
+        else:
+            rows = _fetchall(
+                conn,
+                "SELECT date, type, amount_clp "
+                "FROM fintual_flows ORDER BY date DESC",
+            )
+    finally:
+        conn.close()
+
+    return [
+        {"date": r[0], "type": r[1], "amount_clp": r[2]}
+        for r in rows
+    ]

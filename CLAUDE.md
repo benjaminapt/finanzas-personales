@@ -66,7 +66,7 @@ models/
 
 services/
   aggregator.py       → consolida Fintual + Binance en USD (con tipo de cambio)
-  cache.py            → SQLite/PostgreSQL: snapshots + flujos Binance cacheados
+  cache.py            → SQLite/PostgreSQL: snapshots + flujos Binance y Fintual cacheados
   historical.py       → NAV diario Fintual (API pública) + precio crypto (CoinGecko)
   flows.py            → aportes/retiros por producto (intercepción red + P2P API)
   ai_advisor.py       → análisis del portafolio con Gemini
@@ -78,7 +78,7 @@ db/
   portfolio.db        → datos (no committear)
 ```
 
-## Estado actual del proyecto (v0.12 — 2026-04-22)
+## Estado actual del proyecto (v0.13 — 2026-04-22)
 
 ### ✅ Funcionando
 - Fintual: scraping autenticado con Playwright (3 fondos + Reserva)
@@ -86,7 +86,7 @@ db/
 - Dashboard: portafolio en USD/CLP, evolución histórica, rentabilidad por instrumento
 - Historial NAV Fintual: API pública Fintual (sin auth)
 - **Historial precios crypto: CoinGecko API** (público, sin geo-restricción — funciona local y cloud)
-- Flujos Fintual: API `/api/goals` con cookies → URL `/show-goal/{id}/movements/` → text parsing
+- **Flujos Fintual: cacheados en tabla `fintual_flows` de Supabase** — el Mac los sincroniza con `sync` (usa Playwright), el cloud los lee de DB
 - **Flujos Binance P2P: cacheados en tabla `binance_flows` de Supabase** — el Mac los sincroniza con `sync`, el cloud los lee de DB
 - Análisis IA con Gemini (botón en dashboard)
 - **Auth**: login con usuario+contraseña, **persistente entre recargas** via token en URL (`st.query_params`)
@@ -94,7 +94,7 @@ db/
 - **DB dual**: SQLite local (`DATABASE_URL` no definida) o PostgreSQL/Supabase (cloud)
 - **Deploy Streamlit Community Cloud**: `https://dcdymygparwpmzqlcykrvn.streamlit.app/`
 - **Fintual en cloud**: via `GET /api/goals` con `FINTUAL_SESSION_COOKIE` (sin Playwright)
-- **Cron Mac**: sync diario 8am → guarda snapshot + flujos Binance en Supabase
+- **Cron Mac**: sync diario 8am → guarda snapshot + flujos Binance + flujos Fintual en Supabase
 
 ### 🗂️ Backlog (no prioritario)
 - **Fintual 24/7 sin intervención manual**: desactivar 2FA en cuenta Fintual → `POST /api/access_tokens` con email+password funcionaría sin cookie → token fresco en cada request, sin expiración. Actualmente la cookie dura ~30 días y hay que renovar manualmente con `setup-fintual`.
@@ -102,7 +102,7 @@ db/
 ### ⚠️ Limitaciones conocidas
 - **Sesión Fintual expira ~30 días** → re-ejecutar `setup-fintual` y actualizar `FINTUAL_SESSION_COOKIE` en Streamlit Cloud secrets
 - **Binance API geo-restringida**: `api.binance.com` bloqueado desde EEUU (servidores Streamlit Cloud). Balances y flujos se leen de Supabase; historial de precios usa CoinGecko
-- **Flujos Fintual en cloud**: requieren Playwright (no disponible) → solo funcionan localmente
+- **Flujos Fintual en cloud**: requieren Playwright para obtener datos frescos → en cloud se leen de DB (cacheados por `sync` desde Mac)
 - **Tipo de cambio USD/CLP**: de open.er-api.com, fallback a 950 si el servicio falla
 
 ### 🔑 Nota crítica — Streamlit Cloud + Supabase
