@@ -15,8 +15,15 @@ except Exception:
     pass
 
 # ── Autenticación ────────────────────────────────────────────────────────────
+import hashlib as _hl
+
 _AUTH_USER = os.environ.get("AUTH_USERNAME", "")
 _AUTH_PASS = os.environ.get("AUTH_PASSWORD", "")
+_AUTH_TOKEN = _hl.sha256(f"{_AUTH_USER}:{_AUTH_PASS}:finanzas".encode()).hexdigest()[:16] if _AUTH_USER else ""
+
+# Auto-login si el token está en la URL (persiste entre recargas del browser)
+if _AUTH_TOKEN and st.query_params.get("t") == _AUTH_TOKEN:
+    st.session_state.authenticated = True
 
 if _AUTH_USER and _AUTH_PASS:
     if not st.session_state.get("authenticated"):
@@ -29,6 +36,7 @@ if _AUTH_USER and _AUTH_PASS:
         if submitted:
             if username == _AUTH_USER and password == _AUTH_PASS:
                 st.session_state.authenticated = True
+                st.query_params["t"] = _AUTH_TOKEN
                 st.rerun()
             else:
                 st.error("Usuario o contraseña incorrectos")
@@ -195,6 +203,7 @@ with st.sidebar:
     if _AUTH_USER and _AUTH_PASS:
         if st.button("🚪 Cerrar sesión", use_container_width=True):
             st.session_state.authenticated = False
+            st.query_params.clear()
             st.rerun()
 
 
