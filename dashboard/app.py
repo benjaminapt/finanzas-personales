@@ -59,11 +59,11 @@ st.markdown("""
 @st.cache_data(ttl=300)
 def load_live_portfolio():
     """
-    Carga el portafolio en vivo.
-    En modo cloud (sin Playwright disponible), Fintual se rellena desde el
-    último snapshot guardado en DB. Binance siempre se consulta en vivo.
-    Retorna (portfolio, fintual_cached_ts) donde fintual_cached_ts es None
-    si los datos de Fintual son en vivo, o el timestamp del snapshot si son cacheados.
+    Carga el portafolio intentando APIs en vivo.
+    Si alguna plataforma falla (geo-restricción, cookie expirada, etc.),
+    rellena desde el último snapshot guardado en DB.
+    Retorna (portfolio, cached_ts, errors) donde cached_ts es el timestamp
+    del snapshot usado como fallback, o None si todo es en vivo.
     """
     from services.aggregator import get_portfolio
     from services.cache import get_last_snapshot
@@ -75,42 +75,59 @@ def load_live_portfolio():
         portfolio, _errors = _result
     else:
         portfolio, _errors = _result, {}
-    fintual_cached_ts = None
+    cached_ts = None
+    last = None  # lazy-load snapshot solo si hace falta
 
-    # Si no hay posiciones de Fintual, rellenar desde último snapshot
+    # --- Fallback Fintual: si la API falló, rellenar desde DB ---
     fintual_positions = [p for p in portfolio.positions if p.platform == "fintual"]
     if not fintual_positions:
         last = get_last_snapshot()
         if last:
             import requests as _req
-            # Obtener tipo de cambio actual para recalcular USD
             try:
                 r = _req.get("https://open.er-api.com/v6/latest/USD", timeout=5)
                 usdclp = r.json()["rates"]["CLP"]
             except Exception:
                 usdclp = 950.0
 
-            cached_positions = [
+            cached_fintual = [
                 Position(
-                    platform=p["platform"],
-                    name=p["name"],
-                    amount=p["amount"],
+                    platform=p["platform"], name=p["name"], amount=p["amount"],
                     value_usd=p["amount"] / usdclp if p["currency"] == "CLP" else p["value_usd"],
                     currency=p["currency"],
                 )
-                for p in last["positions"]
-                if p["platform"] == "fintual"
+                for p in last["positions"] if p["platform"] == "fintual"
             ]
-            all_positions = cached_positions + [p for p in portfolio.positions if p.platform != "fintual"]
-            total_usd = sum(p.value_usd for p in all_positions)
+            non_fintual = [p for p in portfolio.positions if p.platform != "fintual"]
             portfolio = Portfolio(
                 timestamp=datetime.now(),
-                positions=all_positions,
-                total_usd=total_usd,
+                positions=cached_fintual + non_fintual,
+                total_usd=sum(p.value_usd for p in cached_fintual + non_fintual),
             )
-            fintual_cached_ts = last["timestamp"]
+            cached_ts = last["timestamp"]
 
-    return portfolio, fintual_cached_ts, _errors
+    # --- Fallback Binance: si la API falló (geo-restricción), rellenar desde DB ---
+    binance_positions = [p for p in portfolio.positions if p.platform == "binance"]
+    if not binance_positions:
+        if last is None:
+            last = get_last_snapshot()
+        if last:
+            cached_binance = [
+                Position(
+                    platform=p["platform"], name=p["name"], amount=p["amount"],
+                    value_usd=p["value_usd"], currency=p["currency"],
+                )
+                for p in last["positions"] if p["platform"] == "binance"
+            ]
+            non_binance = [p for p in portfolio.positions if p.platform != "binance"]
+            portfolio = Portfolio(
+                timestamp=datetime.now(),
+                positions=non_binance + cached_binance,
+                total_usd=sum(p.value_usd for p in non_binance + cached_binance),
+            )
+            cached_ts = cached_ts or last["timestamp"]
+
+    return portfolio, cached_ts, _errors
 
 
 def load_history(days=None):
@@ -184,11 +201,11 @@ with st.sidebar:
 # ── Carga de datos ───────────────────────────────────────────────────────────
 with st.spinner("Cargando portafolio..."):
     try:
-        portfolio, fintual_cached_ts, connector_errors = load_live_portfolio()
+        portfolio, cached_ts, connector_errors = load_live_portfolio()
         error = None
     except Exception as e:
         portfolio = None
-        fintual_cached_ts = None
+        cached_ts = None
         connector_errors = {}
         error = str(e)
 
@@ -207,22 +224,16 @@ if not portfolio or not portfolio.positions:
     st.warning("No se encontraron posiciones. Verifica tu `.env`.")
     st.stop()
 
-# Mostrar errores de conectores (no fatales)
-if connector_errors.get("binance"):
+# Mostrar errores de conectores solo si no pudimos recuperar datos de ninguna fuente
+if connector_errors.get("binance") and not any(p.platform == "binance" for p in portfolio.positions):
     st.warning(f"⚠️ Binance no disponible: `{connector_errors['binance']}`")
-if connector_errors.get("fintual") and not fintual_cached_ts:
+if connector_errors.get("fintual") and not any(p.platform == "fintual" for p in portfolio.positions):
     st.warning(f"⚠️ Fintual no disponible: `{connector_errors['fintual']}`")
 
-if fintual_cached_ts:
+if cached_ts:
     from datetime import datetime as _dt
-    ts_fmt = _dt.fromisoformat(fintual_cached_ts).strftime("%d/%m/%Y %H:%M")
-    cookie_configured = bool(os.environ.get("FINTUAL_SESSION_COOKIE"))
-    if cookie_configured:
-        st.warning(f"⚠️ Fintual: cookie de sesión expirada. Datos del último sync ({ts_fmt}). "
-                   "Ejecuta `setup-fintual` en tu Mac y actualiza el secret `FINTUAL_SESSION_COOKIE`.")
-    else:
-        st.info(f"Fintual: datos del último sync ({ts_fmt}). "
-                "Para datos en vivo, configura `FINTUAL_SESSION_COOKIE` en Streamlit Cloud secrets.")
+    ts_fmt = _dt.fromisoformat(cached_ts).strftime("%d/%m/%Y %H:%M")
+    st.info(f"Algunos datos provienen del último sync ({ts_fmt}).")
 
 # Variación vs último snapshot
 variation_delta = None
