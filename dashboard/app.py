@@ -231,6 +231,17 @@ with st.sidebar:
             st.query_params.clear()
             st.rerun()
 
+    with st.expander("🔧 Debug DB", expanded=False):
+        try:
+            from services.cache import _DB_URL, get_fintual_flows_cached, get_binance_flows_cached
+            st.text(f"DB: {'PostgreSQL' if _DB_URL else 'SQLite (!)' }")
+            fc = len(get_fintual_flows_cached())
+            bc = len(get_binance_flows_cached())
+            st.text(f"Fintual flows en DB: {fc}")
+            st.text(f"Binance flows en DB: {bc}")
+        except Exception as e:
+            st.text(f"Error: {e}")
+
 
 # ── Carga de datos ───────────────────────────────────────────────────────────
 with st.spinner("Cargando portafolio..."):

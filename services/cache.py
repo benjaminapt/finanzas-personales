@@ -15,6 +15,11 @@ _PH = "%s" if _DB_URL else "?"   # placeholder de parámetros por driver
 # ── Conexión ──────────────────────────────────────────────────────────────────
 
 def _get_conn():
+    global _DB_URL, _PH
+    # Re-leer en cada conexión: captura secrets sincronizados después del import
+    _DB_URL = os.getenv("DATABASE_URL")
+    _PH = "%s" if _DB_URL else "?"
+
     if _DB_URL:
         import psycopg2
         conn = psycopg2.connect(_DB_URL)
