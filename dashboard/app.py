@@ -3,6 +3,13 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+# Forzar reimportación de módulos propios en cada ejecución.
+# Streamlit hot-reload re-ejecuta el script pero NO reimporta módulos
+# desde sys.modules, dejando versiones viejas cacheadas tras un redeploy.
+for _mod in list(sys.modules):
+    if _mod.startswith(("services.", "connectors.", "models.")):
+        del sys.modules[_mod]
+
 import streamlit as st
 
 # Streamlit Cloud expone secrets via st.secrets, no os.environ.
