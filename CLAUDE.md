@@ -78,7 +78,7 @@ db/
   portfolio.db        → datos (no committear)
 ```
 
-## Estado actual del proyecto (v0.14 — 2026-04-22)
+## Estado actual del proyecto (v0.15 — 2026-04-23)
 
 ### ✅ Funcionando
 - Fintual: scraping autenticado con Playwright (3 fondos + Reserva)
@@ -109,6 +109,15 @@ db/
 - **Secrets**: Streamlit Cloud expone via `st.secrets`, no `os.environ`. `dashboard/app.py` sincroniza al inicio con un loop `for k,v in st.secrets.items(): os.environ[k] = str(v)`
 - **Conexión DB**: usar **Transaction Pooler** (`aws-1-us-west-2.pooler.supabase.com:6543`), NO la conexión directa (`db.*.supabase.co:5432`) que usa IPv6 y Streamlit Cloud no puede alcanzar
 - **GitHub**: repo público `benjaminapt/finanzas-personales` (Streamlit Cloud requiere acceso público o cuenta Teams)
+
+### 🔑 Nota crítica — Streamlit hot-reload y sys.modules
+- **Streamlit re-ejecuta el script en cada interacción pero NO reimporta módulos** — `sys.modules` mantiene la versión vieja cacheada de módulos como `services.cache`
+- **Tras un redeploy**, `app.py` se actualiza pero los módulos importados pueden seguir siendo de la versión anterior
+- **Fix aplicado**: al inicio de `app.py` se borran `services.*`, `connectors.*`, `models.*` de `sys.modules` para forzar reimportación
+- **`_DB_URL` en cache.py**: se re-lee de `os.environ` en cada `_get_conn()` (no solo al importar) para capturar secrets sincronizados después del import
+- **Nombres Fintual**: `_clean_fund_name()` normaliza quitando emojis (API retorna `"💰 Muy Arriesgada"`, sync guarda `"Muy Arriesgada"`)
+- **`_ensure_*_table()`**: SOLO en funciones de escritura, NUNCA en lectura (corrupción de transaction state en PostgreSQL)
+- **Debug panel**: sidebar tiene "🔧 Debug DB" que muestra estado de DB y conteo de flows (temporal, útil para diagnóstico)
 
 ### 🔑 Nota crítica — Fintual API via cookie de sesión
 - **`FINTUAL_SESSION_COOKIE`**: valor de `_fintual_session_cookie` del browser tras login en Fintual

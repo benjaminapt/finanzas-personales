@@ -1,5 +1,22 @@
 # Changelog — Proyecto Finanzas Personales
 
+## [v0.15] — 2026-04-23 — Fix stale modules en Streamlit Cloud + lazy DB_URL
+
+### Bugs encontrados y corregidos
+- **sys.modules stale**: Streamlit Cloud hot-reload re-ejecuta app.py pero NO reimporta módulos. Tras redeploy, `services.cache` seguía siendo la versión vieja (sin funciones de flows). Fix: borrar `services.*`, `connectors.*`, `models.*` de `sys.modules` al inicio de app.py.
+- **_DB_URL frozen at import**: `_DB_URL = os.getenv("DATABASE_URL")` se leía al importar cache.py. Si el import ocurría antes del sync de `st.secrets` → `_DB_URL` quedaba None para siempre. Fix: `_get_conn()` re-lee `DATABASE_URL` de env en cada llamada.
+- **Transaction state corruption (v0.14)**: `_ensure_*_table()` dentro de funciones de lectura corrompía transacción PostgreSQL si fallaba. Fix: solo en escritura + rollback en except.
+- **Name mismatch Fintual (v0.14)**: API devuelve `"💰 Muy Arriesgada"`, sync guardaba `"Muy Arriesgada"`. Fix: `_clean_fund_name()` normaliza.
+- **Debug panel**: sidebar con "🔧 Debug DB" muestra DB type, flow counts y errores reales.
+
+### Archivos modificados
+- `dashboard/app.py` — sys.modules clear, debug panel, logging en fallbacks
+- `services/cache.py` — lazy _DB_URL, _clean_fund_name, rollback en _ensure_*_table, quitar ensure de reads
+- `CLAUDE.md` — v0.15, nota sobre hot-reload y sys.modules
+- `CHANGELOG.md` — esta entrada
+
+---
+
 ## [v0.14] — 2026-04-22 — Fix flujos vacíos en cloud (transaction state + name mismatch)
 
 ### Bugs encontrados y corregidos
