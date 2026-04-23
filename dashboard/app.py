@@ -233,14 +233,21 @@ with st.sidebar:
 
     with st.expander("🔧 Debug DB", expanded=False):
         try:
-            from services.cache import _DB_URL, get_fintual_flows_cached, get_binance_flows_cached
-            st.text(f"DB: {'PostgreSQL' if _DB_URL else 'SQLite (!)' }")
-            fc = len(get_fintual_flows_cached())
-            bc = len(get_binance_flows_cached())
-            st.text(f"Fintual flows en DB: {fc}")
-            st.text(f"Binance flows en DB: {bc}")
+            import services.cache as _cache
+            st.text(f"Module: {_cache.__file__}")
+            st.text(f"DB: {'PostgreSQL' if _cache._DB_URL else 'SQLite'}")
+            funcs = [x for x in dir(_cache) if 'cached' in x or 'flows' in x]
+            st.text(f"Flow funcs: {funcs}")
+            if hasattr(_cache, 'get_fintual_flows_cached'):
+                fc = len(_cache.get_fintual_flows_cached())
+                bc = len(_cache.get_binance_flows_cached())
+                st.text(f"Fintual: {fc}, Binance: {bc}")
+            else:
+                st.text("MISSING: get_fintual_flows_cached")
+                st.text(f"All: {[x for x in dir(_cache) if not x.startswith('_')]}")
         except Exception as e:
-            st.text(f"Error: {e}")
+            import traceback
+            st.code(traceback.format_exc())
 
 
 # ── Carga de datos ───────────────────────────────────────────────────────────
