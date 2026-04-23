@@ -78,7 +78,7 @@ db/
   portfolio.db        → datos (no committear)
 ```
 
-## Estado actual del proyecto (v0.13 — 2026-04-22)
+## Estado actual del proyecto (v0.14 — 2026-04-22)
 
 ### ✅ Funcionando
 - Fintual: scraping autenticado con Playwright (3 fondos + Reserva)

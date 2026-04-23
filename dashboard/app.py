@@ -169,14 +169,14 @@ def load_fintual_flows(fund_name):
     try:
         from services.flows import get_fintual_flows
         flows = get_fintual_flows(fund_name)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[Dashboard] Fintual flows live failed for '{fund_name}': {e}")
     if not flows:
         try:
             from services.cache import get_fintual_flows_cached
             flows = get_fintual_flows_cached(fund_name)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[Dashboard] Fintual flows DB fallback failed for '{fund_name}': {e}")
     return flows
 
 
@@ -186,14 +186,14 @@ def load_binance_flows(asset):
     try:
         from services.flows import get_binance_flows
         flows = get_binance_flows(asset=asset)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[Dashboard] Binance flows live failed for '{asset}': {e}")
     if not flows:
         try:
             from services.cache import get_binance_flows_cached
             flows = get_binance_flows_cached(asset=asset)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[Dashboard] Binance flows DB fallback failed for '{asset}': {e}")
     return flows
 
 

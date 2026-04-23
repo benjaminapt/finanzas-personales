@@ -1,5 +1,20 @@
 # Changelog — Proyecto Finanzas Personales
 
+## [v0.14] — 2026-04-22 — Fix flujos vacíos en cloud (transaction state + name mismatch)
+
+### Bugs encontrados y corregidos
+- **Transaction state corruption**: `_ensure_*_flows_table()` se llamaba dentro de funciones de lectura. Si fallaba en PostgreSQL, la transacción quedaba abortada y TODOS los SELECT posteriores fallaban silenciosamente. Fix: eliminar `_ensure_*_table` de funciones de lectura, solo usarlas en escritura. Agregar `conn.rollback()` en except.
+- **Name mismatch Fintual**: La API devuelve `"💰 Muy Arriesgada"` (con emoji), sync guardaba `"Muy Arriesgada"` (sin emoji). Fix: función `_clean_fund_name()` normaliza nombres quitando emojis del inicio.
+- **Silent exception swallowing**: Todos los `except Exception: pass` en dashboard reemplazados con logging para diagnóstico.
+
+### Archivos modificados
+- `services/cache.py` — `_clean_fund_name()`, rollback en `_ensure_*_table`, quitar `_ensure_*_table` de funciones de lectura
+- `dashboard/app.py` — logging en fallbacks de flows
+- `CLAUDE.md` — v0.14
+- `CHANGELOG.md` — esta entrada
+
+---
+
 ## [v0.13] — 2026-04-22 — Flujos Fintual cacheados en DB + resilencia cloud
 
 ### ✅ Logrado

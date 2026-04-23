@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from datetime import datetime, timedelta
 
 from models.portfolio import Portfolio, Position
@@ -52,6 +53,11 @@ def _get_conn():
         return conn
 
 
+def _clean_fund_name(name: str) -> str:
+    """Quita emojis del inicio del nombre para normalizar entre API y Playwright."""
+    return re.sub(r"^[\U00010000-\U0010ffff\u2600-\u27BF\U0001F300-\U0001FAFF]+\s*", "", name).strip()
+
+
 def _ensure_flows_table(conn):
     """Crea tabla binance_flows si no existe. Separada de _get_conn para no romper conexiones normales."""
     try:
@@ -85,7 +91,10 @@ def _ensure_flows_table(conn):
             """)
             conn.commit()
     except Exception:
-        pass
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
 
 def _fetchall(conn, sql, params=()):
@@ -233,7 +242,6 @@ def save_binance_flows(flows: list) -> int:
 def get_binance_flows_cached(asset: str = None) -> list:
     """Lee flujos Binance de DB. Si asset es None, retorna todos."""
     conn = _get_conn()
-    _ensure_flows_table(conn)
     try:
         if asset:
             rows = _fetchall(
@@ -291,11 +299,15 @@ def _ensure_fintual_flows_table(conn):
             """)
             conn.commit()
     except Exception:
-        pass
+        try:
+            conn.rollback()
+        except Exception:
+            pass
 
 
 def save_fintual_flows(fund_name: str, flows: list) -> int:
     """Guarda flujos Fintual en DB. Usa clave compuesta como unique."""
+    fund_name = _clean_fund_name(fund_name)
     conn = _get_conn()
     _ensure_fintual_flows_table(conn)
     saved = 0
@@ -329,8 +341,9 @@ def save_fintual_flows(fund_name: str, flows: list) -> int:
 
 def get_fintual_flows_cached(fund_name: str = None) -> list:
     """Lee flujos Fintual de DB. Retorna formato compatible con get_fintual_flows."""
+    if fund_name:
+        fund_name = _clean_fund_name(fund_name)
     conn = _get_conn()
-    _ensure_fintual_flows_table(conn)
     try:
         if fund_name:
             rows = _fetchall(
