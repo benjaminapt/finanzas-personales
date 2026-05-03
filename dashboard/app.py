@@ -501,6 +501,40 @@ if all_positions:
             with st.spinner("Cargando movimientos..."):
                 flows = load_binance_flows(pos.name)
 
+            # Enriquecer convert trades: cruzar con compras P2P de USDT
+            # para calcular el costo real en CLP de cada conversión
+            _has_converts = any(
+                f.get("type") in ("convert_compra", "spot_compra")
+                and f.get("fiat") in ("USDT", "USD", "BUSD")
+                for f in flows
+            )
+            _usdt_rates = {}  # date → CLP per USDT (from P2P)
+            if _has_converts:
+                usdt_flows = load_binance_flows("USDT")
+                for uf in usdt_flows:
+                    if uf.get("type") == "p2p_compra":
+                        uf_amt = float(uf.get("amount", 0))
+                        uf_fiat = float(uf.get("fiat_amount", 0) or 0)
+                        if uf_amt > 0 and uf_fiat > 0:
+                            d = uf.get("date", "")
+                            if d not in _usdt_rates:
+                                _usdt_rates[d] = []
+                            _usdt_rates[d].append(uf_fiat / uf_amt)
+                # Average rate per date
+                _usdt_avg = {d: sum(rs) / len(rs) for d, rs in _usdt_rates.items()}
+                # Fallback: overall average of all P2P rates
+                _all_rates = [r for rs in _usdt_rates.values() for r in rs]
+                _fallback_rate = sum(_all_rates) / len(_all_rates) if _all_rates else usdclp
+
+                # Enrich each convert/spot flow with CLP equivalent
+                for f in flows:
+                    if (f.get("type") in ("convert_compra", "spot_compra")
+                            and f.get("fiat") in ("USDT", "USD", "BUSD")):
+                        usdt_spent = float(f.get("fiat_amount", 0) or 0)
+                        rate = _usdt_avg.get(f.get("date"), _fallback_rate)
+                        f["_clp_cost"] = usdt_spent * rate
+                        f["_clp_rate"] = rate
+
             # ── P&L (Ganancia / Pérdida) ─────────────────────────────────────
             if flows:
                 _buy_types = ("p2p_compra", "fiat_compra", "spot_compra", "convert_compra")
@@ -511,7 +545,9 @@ if all_positions:
                     fiat_amt = float(f.get("fiat_amount", 0) or 0)
                     fiat_cur = f.get("fiat", "")
                     if f.get("type") in _buy_types and fiat_amt > 0:
-                        if fiat_cur in ("USDT", "USD", "BUSD"):
+                        if "_clp_cost" in f:
+                            total_cost_usd += f["_clp_cost"] / usdclp
+                        elif fiat_cur in ("USDT", "USD", "BUSD"):
                             total_cost_usd += fiat_amt
                         else:
                             total_cost_usd += fiat_amt / usdclp
@@ -547,7 +583,14 @@ if all_positions:
                     qty = f"{amt:,.6f} {f.get('asset', '')}"
                     fiat_str = ""
                     price_str = ""
-                    if fiat_amt > 0:
+                    if "_clp_cost" in f:
+                        # Convert/spot trade enriched with CLP cost
+                        clp_cost = f["_clp_cost"]
+                        fiat_str = f"${clp_cost:,.0f} CLP (via {fiat_amt:,.0f} USDT)"
+                        if amt > 0:
+                            price_usd = clp_cost / usdclp / amt
+                            price_str = f"${price_usd:,.2f}"
+                    elif fiat_amt > 0:
                         fiat_cur = f.get('fiat', 'CLP')
                         fiat_str = f"${fiat_amt:,.0f} {fiat_cur}"
                         if amt > 0:
