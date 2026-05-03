@@ -235,7 +235,7 @@ def get_binance_flows(asset: str = None) -> list[dict]:
         if isinstance(data, list):
             return data
         if isinstance(data, dict):
-            inner = data.get("data", [])
+            inner = data.get("data") or data.get("list") or []
             return inner if isinstance(inner, list) else []
         return []
 
@@ -355,6 +355,83 @@ def get_binance_flows(asset: str = None) -> list[dict]:
                     })
     except Exception as e:
         print(f"[Flows/Binance] Error fiat orders: {e}")
+
+    # ── Spot market trades (compras/ventas en mercado spot, ej: USDT→ETH) ────
+    # Captura conversiones que no son P2P ni fiat, como comprar ETH con USDT
+    _SPOT_QUOTE = "USDT"
+    assets_to_check = [asset.upper()] if asset else [
+        "ETH", "BTC", "ADA", "SOL", "DOT", "BNB", "XRP", "DOGE",
+    ]
+    for base in assets_to_check:
+        if base == _SPOT_QUOTE:
+            continue
+        symbol = f"{base}{_SPOT_QUOTE}"
+        try:
+            trades = signed_request("/api/v3/myTrades", {"symbol": symbol, "limit": 1000})
+            for t in trades:
+                trade_id = f"spot-{symbol}-{t.get('id', '')}"
+                if trade_id in seen_ids:
+                    continue
+                seen_ids.add(trade_id)
+                ts_ms = int(t.get("time", 0))
+                date_str = datetime.fromtimestamp(ts_ms / 1000).strftime("%Y-%m-%d") if ts_ms else "N/A"
+                qty = float(t.get("qty", 0))
+                quote_qty = float(t.get("quoteQty", 0))
+                if qty <= 0:
+                    continue
+                flows.append({
+                    "date": date_str,
+                    "asset": base,
+                    "type": "spot_compra" if t.get("isBuyer") else "spot_venta",
+                    "amount": qty,
+                    "fiat_amount": quote_qty,
+                    "fiat": _SPOT_QUOTE,
+                    "order_id": trade_id,
+                })
+        except Exception as e:
+            print(f"[Flows/Binance] Error spot trades {symbol}: {e}")
+
+    # ── Convert trades (Binance Convert, ej: USDT→ETH directo) ──────────────
+    try:
+        for start_ms, end_ms in _time_windows():
+            converts = signed_request(
+                "/sapi/v1/convert/tradeFlow",
+                {"startTime": start_ms, "endTime": end_ms, "limit": 100},
+            )
+            for c in converts:
+                oid = f"convert-{c.get('orderId', '')}"
+                if oid in seen_ids:
+                    continue
+                seen_ids.add(oid)
+                to_asset = c.get("toAsset", "")
+                from_asset = c.get("fromAsset", "")
+                target = (asset or "").upper()
+                if target and target not in (to_asset.upper(), from_asset.upper()):
+                    continue
+                ts_ms = int(c.get("createTime", 0))
+                date_str = datetime.fromtimestamp(ts_ms / 1000).strftime("%Y-%m-%d") if ts_ms else "N/A"
+                if not target or to_asset.upper() == target:
+                    flows.append({
+                        "date": date_str,
+                        "asset": to_asset,
+                        "type": "convert_compra",
+                        "amount": float(c.get("toAmount", 0)),
+                        "fiat_amount": float(c.get("fromAmount", 0)),
+                        "fiat": from_asset,
+                        "order_id": oid,
+                    })
+                else:
+                    flows.append({
+                        "date": date_str,
+                        "asset": from_asset,
+                        "type": "convert_venta",
+                        "amount": float(c.get("fromAmount", 0)),
+                        "fiat_amount": float(c.get("toAmount", 0)),
+                        "fiat": to_asset,
+                        "order_id": oid,
+                    })
+    except Exception as e:
+        print(f"[Flows/Binance] Error convert: {e}")
 
     flows.sort(key=lambda x: x["date"], reverse=True)
     return flows

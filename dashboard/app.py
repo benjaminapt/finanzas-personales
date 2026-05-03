@@ -12,6 +12,12 @@ for _mod in list(sys.modules):
 
 import streamlit as st
 
+st.set_page_config(
+    page_title="Finanzas Personales",
+    page_icon="📊",
+    layout="wide",
+)
+
 # Streamlit Cloud expone secrets via st.secrets, no os.environ.
 # Sincronizamos para que los módulos que usan os.getenv() los reciban.
 try:
@@ -34,7 +40,6 @@ if _AUTH_TOKEN and st.query_params.get("t") == _AUTH_TOKEN:
 
 if _AUTH_USER and _AUTH_PASS:
     if not st.session_state.get("authenticated"):
-        st.set_page_config(page_title="Finanzas Personales", page_icon="🏦")
         st.markdown("## 🏦 Finanzas Personales")
         with st.form("login_form"):
             username = st.text_input("Usuario")
@@ -53,12 +58,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 from datetime import datetime
-
-st.set_page_config(
-    page_title="Finanzas Personales",
-    page_icon="📊",
-    layout="wide",
-)
 
 # ── Estilos ──────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -498,28 +497,78 @@ if all_positions:
                 st.info(f"No hay datos históricos disponibles para **{pos.name}**.")
                 st.caption("El par de trading podría no existir en Binance, o hubo un error de red.")
 
-            # ── Flujos (depósitos y retiros) ──────────────────────────────────
-            st.markdown("#### Depósitos y retiros")
+            # ── Cargar flujos ─────────────────────────────────────────────────
             with st.spinner("Cargando movimientos..."):
                 flows = load_binance_flows(pos.name)
+
+            # ── P&L (Ganancia / Pérdida) ─────────────────────────────────────
+            if flows:
+                _buy_types = ("p2p_compra", "fiat_compra", "spot_compra", "convert_compra")
+                _sell_types = ("p2p_venta", "fiat_retiro", "spot_venta", "convert_venta", "retiro")
+                total_cost_usd = 0
+                total_sold_usd = 0
+                for f in flows:
+                    fiat_amt = float(f.get("fiat_amount", 0) or 0)
+                    fiat_cur = f.get("fiat", "")
+                    if f.get("type") in _buy_types and fiat_amt > 0:
+                        if fiat_cur in ("USDT", "USD", "BUSD"):
+                            total_cost_usd += fiat_amt
+                        else:
+                            total_cost_usd += fiat_amt / usdclp
+                    elif f.get("type") in _sell_types and fiat_amt > 0:
+                        if fiat_cur in ("USDT", "USD", "BUSD"):
+                            total_sold_usd += fiat_amt
+                        else:
+                            total_sold_usd += fiat_amt / usdclp
+
+                if total_cost_usd > 0:
+                    st.markdown("#### Inversión y rentabilidad")
+                    net_invested = total_cost_usd - total_sold_usd
+                    current_val = pos.value_usd
+                    pnl = current_val - net_invested
+                    pnl_pct = pnl / net_invested * 100 if net_invested > 0 else 0
+                    ic, vc, pc = st.columns(3)
+                    ic.metric("Total invertido", f"${net_invested:,.2f} USD",
+                              delta=f"CLP ${net_invested * usdclp:,.0f}")
+                    vc.metric("Valor actual", f"${current_val:,.2f} USD",
+                              delta=f"CLP ${current_val * usdclp:,.0f}")
+                    color_pnl = "normal" if pnl >= 0 else "inverse"
+                    pc.metric("Ganancia / Pérdida", f"${pnl:,.2f} USD",
+                              delta=f"{pnl_pct:+.1f}%",
+                              delta_color=color_pnl)
+
+            # ── Flujos (depósitos y retiros) ──────────────────────────────────
+            st.markdown("#### Depósitos y retiros")
             if flows:
                 rows = []
                 for f in flows:
-                    qty = f"{float(f.get('amount', 0)):,.6f} {f.get('asset', '')}"
+                    amt = float(f.get('amount', 0))
+                    fiat_amt = float(f.get('fiat_amount', 0) or 0)
+                    qty = f"{amt:,.6f} {f.get('asset', '')}"
                     fiat_str = ""
-                    if f.get("fiat_amount") and float(f.get("fiat_amount", 0)) > 0:
-                        fiat_str = f"${float(f['fiat_amount']):,.0f} {f.get('fiat', 'CLP')}"
+                    price_str = ""
+                    if fiat_amt > 0:
+                        fiat_cur = f.get('fiat', 'CLP')
+                        fiat_str = f"${fiat_amt:,.0f} {fiat_cur}"
+                        if amt > 0:
+                            if fiat_cur in ('USDT', 'USD', 'BUSD'):
+                                price_usd = fiat_amt / amt
+                            else:
+                                price_usd = fiat_amt / usdclp / amt
+                            price_str = f"${price_usd:,.2f}"
                     rows.append({
                         "Fecha": f.get("date", ""),
                         "Tipo": f.get("type", ""),
                         "Cantidad": qty,
+                        "Precio USD": price_str,
                         "Monto fiat": fiat_str,
                     })
                 df_flows = pd.DataFrame(rows)
 
                 def _highlight_binance(row):
                     tipo = row["Tipo"]
-                    if tipo in ("deposito", "p2p_compra", "fiat_compra"):
+                    if tipo in ("deposito", "p2p_compra", "fiat_compra",
+                                "spot_compra", "convert_compra"):
                         color = "#1a3a4a"
                     else:
                         color = "#4a1a1a"
